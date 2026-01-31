@@ -37,7 +37,7 @@ function OrderTracking() {
 
       // Fetch order details
       const ordersResponse = await orderService.getAllOrders();
-      const foundOrder = ordersResponse.data.find(o => o.id == orderId);
+      const foundOrder = ordersResponse.data.find(o => o.id === orderId);
 
       if (!foundOrder) {
         setError('Order not found. Please check your Order ID.');
@@ -96,7 +96,8 @@ function OrderTracking() {
     const dateToUse = createdAt || new Date().toISOString();
     const orderDate = new Date(dateToUse);
     const currentDate = new Date();
-    const daysSinceOrder = isNaN(orderDate.getTime()) ? 0 : Math.floor((currentDate - orderDate) / (1000 * 60 * 60 * 24));
+    // daysSinceOrder can be used for future enhancements
+    // const daysSinceOrder = isNaN(orderDate.getTime()) ? 0 : Math.floor((currentDate - orderDate) / (1000 * 60 * 60 * 24));
 
     switch (status) {
       case 'PENDING':

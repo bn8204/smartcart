@@ -40,4 +40,40 @@ export const orderService = {
 // Payment Services
 export const paymentService = {
   confirmPayment: (paymentData) => apiClient.post('/payments/confirm', paymentData),
+  
+  // Payment Session Management
+  createPaymentSession: (orderId) => 
+    apiClient.post('/payments/session/create', { orderId }),
+  
+  getPaymentSession: (sessionId) => 
+    apiClient.get(`/payments/session/${sessionId}`),
+  
+  resumePaymentSession: (sessionId) => 
+    apiClient.post(`/payments/session/${sessionId}/resume`),
+  
+  completePaymentSession: (sessionId, paymentDetails) => 
+    apiClient.post(`/payments/session/${sessionId}/complete`, paymentDetails),
+  
+  cancelPaymentSession: (sessionId, reason) => 
+    apiClient.post(`/payments/session/${sessionId}/cancel`, { reason }),
+  
+  // Interrupt Handling
+  handlePaymentInterruption: (sessionId, reason) => 
+    apiClient.post(`/payments/session/${sessionId}/interrupt`, { reason }),
+  
+  getPaymentSessionSummary: (sessionId) => 
+    apiClient.get(`/payments/session/${sessionId}/summary`),
+};
+
+// Rating & Feedback Services
+export const ratingService = {
+  submitProductRating: (data) => apiClient.post('/ratings/product', data),
+  getProductRatings: (productId) => apiClient.get(`/ratings/product/${productId}`),
+  getOrderRatings: (orderId) => apiClient.get(`/ratings/order/${orderId}`),
+  
+  submitDeliveryFeedback: (data) => apiClient.post('/ratings/delivery', data),
+  getDeliveryFeedback: (orderId) => apiClient.get(`/ratings/delivery/order/${orderId}`),
+  getUserDeliveryFeedback: () => apiClient.get('/ratings/delivery/user/all'),
+  
+  getDeliveryStatistics: () => apiClient.get('/ratings/delivery/statistics'),
 };

@@ -17,7 +17,13 @@ function AdminOrderManagement() {
     try {
       setLoading(true);
       const response = await orderService.getAllOrders();
-      setOrders(response.data || []);
+      // Extract actual orders array from response (backend returns {success, data, message})
+      const allOrders = response.data?.data || response.data || [];
+      // Filter out cancelled and failed orders from the main view (payment cancelled/failed orders)
+      const activeOrders = Array.isArray(allOrders) 
+        ? allOrders.filter(order => order.status !== 'CANCELLED' && order.status !== 'FAILED')
+        : [];
+      setOrders(activeOrders);
     } catch (err) {
       setMessage('Failed to load orders');
       setMessageType('error');

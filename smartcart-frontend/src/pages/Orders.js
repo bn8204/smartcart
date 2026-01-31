@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { orderService } from '../services/api';
+import ProductRating from '../components/ProductRating';
+import DeliveryFeedback from '../components/DeliveryFeedback';
 
 function Orders() {
   const [orders, setOrders] = useState([]);
@@ -34,6 +36,7 @@ function Orders() {
 
   useEffect(() => {
     fetchOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchOrders = async () => {
@@ -157,6 +160,35 @@ function Orders() {
                   </div>
                 ) : (
                   <p>No items in this order</p>
+                )}
+
+                {/* Show Rating and Feedback for Delivered Orders */}
+                {order.status === 'DELIVERED' && (
+                  <div style={{ marginTop: '1.5rem' }}>
+                    <h4 style={{ borderTop: '2px solid #3498db', paddingTop: '1rem', marginTop: '1rem' }}>
+                      📝 Leave Feedback
+                    </h4>
+                    
+                    {/* Product Ratings */}
+                    {orderItems[order.id]?.map((item, index) => (
+                      <ProductRating
+                        key={`rating-${index}`}
+                        orderId={order.id}
+                        product={item}
+                        onRatingSubmit={(data) => {
+                          console.log('Product rating submitted:', data);
+                        }}
+                      />
+                    ))}
+
+                    {/* Delivery Feedback */}
+                    <DeliveryFeedback
+                      orderId={order.id}
+                      onFeedbackSubmit={(data) => {
+                        console.log('Delivery feedback submitted:', data);
+                      }}
+                    />
+                  </div>
                 )}
               </div>
             )}
