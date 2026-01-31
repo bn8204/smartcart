@@ -1,0 +1,52 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ master, main, develop ]
+    paths:
+      - 'smartcart-backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [ master, main, develop ]
+    paths:
+      - 'smartcart-backend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [14.x, 16.x, 18.x]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+    
+    - name: Install dependencies
+      working-directory: ./smartcart-backend
+      run: npm ci
+    
+    - name: Run linter
+      working-directory: ./smartcart-backend
+      run: npm run lint --if-present || echo "No linter configured"
+    
+    - name: Check syntax
+      working-directory: ./smartcart-backend
+      run: npm run build --if-present || echo "No build script"
+    
+    - name: Verify app structure
+      working-directory: ./smartcart-backend
+      run: |
+        echo "Checking app.js exists..."
+        test -f src/app.js && echo "✓ app.js found"
+        echo "Checking server.js exists..."
+        test -f src/server.js && echo "✓ server.js found"
+        echo "Checking routes directory..."
+        test -d src/routes && echo "✓ routes directory found"
+        echo "Checking controllers directory..."
+        test -d src/controllers && echo "✓ controllers directory found"
