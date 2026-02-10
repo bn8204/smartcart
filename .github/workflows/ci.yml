@@ -29,7 +29,7 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: smartcart-backend
-        run: npm ci --prefer-offline
+        run: npm ci --prefer-offline --legacy-peer-deps
 
       - name: Lint backend code
         working-directory: smartcart-backend
@@ -67,7 +67,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: smartcart-frontend
-        run: npm ci --prefer-offline
+        run: npm ci --prefer-offline --legacy-peer-deps
 
       - name: Lint frontend code
         working-directory: smartcart-frontend
@@ -111,7 +111,7 @@ jobs:
 
       - name: Install admin dependencies
         working-directory: smartcart-admin
-        run: npm ci --prefer-offline
+        run: npm ci --prefer-offline --legacy-peer-deps
 
       - name: Lint admin code
         working-directory: smartcart-admin
@@ -133,7 +133,7 @@ jobs:
           du -sh build/
 
       - name: Upload admin artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: success()
         with:
           name: admin-build
