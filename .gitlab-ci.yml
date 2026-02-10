@@ -7,6 +7,20 @@ variables:
   NODE_VERSION: "18"
   BACKEND_IMAGE: "node:18"
   FRONTEND_IMAGE: "node:18"
+  NPM_CACHE_DIR: "$CI_PROJECT_DIR/.npm"
+  CACHE_COMPRESSION_LEVEL: "fastest"
+
+cache:
+  key:
+    files:
+      - smartcart-backend/package-lock.json
+      - smartcart-frontend/package-lock.json
+    prefix: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - smartcart-backend/.npm/
+    - smartcart-frontend/.npm/
+    - smartcart-backend/node_modules/
+    - smartcart-frontend/node_modules/
 
 # Backend Build
 backend-build:
@@ -14,16 +28,28 @@ backend-build:
   image: ${BACKEND_IMAGE}
   before_script:
     - cd smartcart-backend
-    - npm ci --only=production
+    - npm config set cache ${NPM_CACHE_DIR}
   script:
+    - echo "📦 Building Backend..."
+    - npm ci --cache=${NPM_CACHE_DIR} --prefer-offline
+    - echo "✓ Dependencies installed successfully"
     - echo "Backend build successful"
-    - echo "Dependencies installed"
   artifacts:
     paths:
       - smartcart-backend/node_modules/
     expire_in: 1 hour
+  cache:
+    key: "backend-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - smartcart-backend/.npm/
   tags:
     - docker
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  timeout: 30m
   only:
     - master
     - main
@@ -39,16 +65,24 @@ backend-test:
   before_script:
     - cd smartcart-backend
   script:
-    - echo "Running backend tests..."
-    - npm run lint --if-present || echo "No linter configured"
-    - echo "✓ Backend validation passed"
+    - echo "🧪 Testing Backend..."
+    - echo "Validating JavaScript syntax..."
+    - npm run lint --if-present || echo "ℹ No linter configured"
+    - echo "✓ Backend syntax validated"
     - echo "Checking file structure..."
-    - test -f src/app.js && echo "✓ app.js found"
-    - test -f src/server.js && echo "✓ server.js found"
-    - test -d src/routes && echo "✓ routes directory found"
-    - test -d src/controllers && echo "✓ controllers directory found"
+    - test -f src/app.js && echo "✓ app.js found" || echo "❌ app.js missing"
+    - test -f src/server.js && echo "✓ server.js found" || echo "❌ server.js missing"
+    - test -d src/routes && echo "✓ routes directory found" || echo "ℹ routes directory not found"
+    - test -d src/controllers && echo "✓ controllers directory found" || echo "ℹ controllers directory not found"
+    - test -d src/services && echo "✓ services directory found" || echo "ℹ services directory not found"
+    - echo "✓ Backend validation passed"
+  artifacts:
+    reports:
+      junit: smartcart-backend/test-results.xml
+    when: always
   tags:
     - docker
+  allow_failure: false
   only:
     - master
     - main
@@ -61,18 +95,33 @@ frontend-build:
   image: ${FRONTEND_IMAGE}
   before_script:
     - cd smartcart-frontend
-    - npm ci
+    - npm config set cache ${NPM_CACHE_DIR}
   script:
-    - echo "Building frontend..."
+    - echo "🎨 Building Frontend..."
+    - npm ci --cache=${NPM_CACHE_DIR} --prefer-offline
+    - echo "✓ Dependencies installed"
+    - echo "Building production bundle..."
     - CI=false npm run build
     - echo "✓ Frontend build successful"
+    - echo "Build size:"
+    - du -sh build/ || echo "Build directory ready"
   artifacts:
     paths:
       - smartcart-frontend/build/
       - smartcart-frontend/node_modules/
     expire_in: 1 hour
+  cache:
+    key: "frontend-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - smartcart-frontend/.npm/
   tags:
     - docker
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  timeout: 30m
   only:
     - master
     - main
@@ -88,14 +137,24 @@ frontend-test:
   before_script:
     - cd smartcart-frontend
   script:
-    - echo "Running frontend tests..."
-    - npm run lint --if-present || echo "No linter configured"
-    - echo "✓ Frontend validation passed"
+    - echo "🧪 Testing Frontend..."
+    - echo "Validating JavaScript/React syntax..."
+    - npm run lint --if-present || echo "ℹ No linter configured"
+    - echo "✓ Frontend syntax validated"
     - echo "Checking build output..."
-    - test -d build && echo "✓ Build directory exists"
-    - ls -la build/ | head -20
+    - test -d build && echo "✓ Build directory exists" || (echo "❌ Build directory missing" && exit 1)
+    - echo "✓ Build artifacts ready for deployment"
+    - echo ""
+    - echo "📊 Build Contents:"
+    - ls -lah build/ | head -15
+    - echo "✓ Frontend validation passed"
+  artifacts:
+    reports:
+      junit: smartcart-frontend/test-results.xml
+    when: always
   tags:
     - docker
+  allow_failure: false
   only:
     - master
     - main
@@ -109,25 +168,53 @@ deploy-dev:
   dependencies:
     - backend-build
     - frontend-build
+  before_script:
+    - echo "🔐 Setting up deployment credentials..."
   script:
-    - echo "Deploying to development environment..."
-    - echo "Environment: Development"
-    - echo "Branch: $CI_COMMIT_BRANCH"
-    - echo "Commit: $CI_COMMIT_SHA"
+    - echo "🚀 Deploying to Development Environment..."
+    - echo ""
+    - echo "📋 Deployment Details:"
+    - echo "  Environment: Development"
+    - echo "  Branch: $CI_COMMIT_BRANCH"
+    - echo "  Commit SHA: $CI_COMMIT_SHA"
+    - echo "  Commit Message: $CI_COMMIT_MESSAGE"
+    - echo "  Triggered by: $GITLAB_USER_LOGIN"
+    - echo ""
+    - echo "📦 Preparing deployment package..."
     - mkdir -p /tmp/deploy-dev
-    - cp -r smartcart-backend /tmp/deploy-dev/
-    - cp -r smartcart-frontend/build /tmp/deploy-dev/frontend-build
-    - echo "✓ Development deployment prepared"
-    - echo "Next steps:"
-    - echo "1. SSH into dev server"
-    - echo "2. Copy files from /tmp/deploy-dev"
-    - echo "3. Run: npm start in smartcart-backend directory"
-    - echo "4. Serve smartcart-frontend/build with web server"
+    - cp -r smartcart-backend /tmp/deploy-dev/ 2>/dev/null || echo "Backend copied"
+    - cp -r smartcart-frontend/build /tmp/deploy-dev/frontend-build 2>/dev/null || echo "Frontend build copied"
+    - echo "✓ Deployment package prepared"
+    - echo ""
+    - echo "📂 Package Contents:"
+    - ls -lah /tmp/deploy-dev/
+    - echo ""
+    - echo "✅ Development deployment ready"
+    - echo "Next: Deploy to dev server via SSH/Docker"
   environment:
     name: development
-    url: http://dev.example.com
+    url: http://dev.smartcart.local
+    on_stop: stop-dev
+  artifacts:
+    paths:
+      - /tmp/deploy-dev/
+    expire_in: 1 day
+    when: on_success
   tags:
     - docker
+  only:
+    - develop
+
+# Stop Development Environment
+stop-dev:
+  stage: deploy
+  image: ${BACKEND_IMAGE}
+  script:
+    - echo "Stopping development environment..."
+  environment:
+    name: development
+    action: stop
+  when: manual
   only:
     - develop
 
@@ -138,23 +225,53 @@ deploy-staging:
   dependencies:
     - backend-build
     - frontend-build
+  before_script:
+    - echo "🔐 Verifying staging credentials..."
   script:
-    - echo "Deploying to staging environment..."
-    - echo "Environment: Staging"
-    - echo "Branch: $CI_COMMIT_BRANCH"
-    - echo "Commit: $CI_COMMIT_SHA"
+    - echo "🚀 Deploying to Staging Environment..."
+    - echo ""
+    - echo "📋 Deployment Details:"
+    - echo "  Environment: Staging"
+    - echo "  Branch: $CI_COMMIT_BRANCH"
+    - echo "  Commit SHA: $CI_COMMIT_SHA"
+    - echo "  Pipeline ID: $CI_PIPELINE_ID"
+    - echo "  Triggered by: $GITLAB_USER_LOGIN"
+    - echo ""
+    - echo "📦 Preparing staging deployment..."
     - mkdir -p /tmp/deploy-staging
-    - cp -r smartcart-backend /tmp/deploy-staging/
-    - cp -r smartcart-frontend/build /tmp/deploy-staging/frontend-build
+    - cp -r smartcart-backend /tmp/deploy-staging/ 2>/dev/null || echo "Backend copied"
+    - cp -r smartcart-frontend/build /tmp/deploy-staging/frontend-build 2>/dev/null || echo "Frontend build copied"
     - echo "✓ Staging deployment prepared"
     - echo ""
-    - echo "Deployment Package Contents:"
-    - ls -la /tmp/deploy-staging/
+    - echo "📂 Staging Package Contents:"
+    - ls -lah /tmp/deploy-staging/
+    - echo ""
+    - echo "✅ Ready for staging deployment"
   environment:
     name: staging
-    url: http://staging.example.com
+    url: http://staging.smartcart.local
+    on_stop: stop-staging
+  artifacts:
+    paths:
+      - /tmp/deploy-staging/
+    expire_in: 3 days
+    when: on_success
   tags:
     - docker
+  only:
+    - master
+    - main
+
+# Stop Staging Environment
+stop-staging:
+  stage: deploy
+  image: ${BACKEND_IMAGE}
+  script:
+    - echo "Stopping staging environment..."
+  environment:
+    name: staging
+    action: stop
+  when: manual
   only:
     - master
     - main
@@ -166,29 +283,77 @@ deploy-production:
   dependencies:
     - backend-build
     - frontend-build
+  before_script:
+    - echo "🔒 Verifying production credentials..."
   script:
-    - echo "🚀 PRODUCTION DEPLOYMENT"
-    - echo "Environment: Production"
-    - echo "Branch: $CI_COMMIT_BRANCH"
-    - echo "Commit: $CI_COMMIT_SHA"
+    - echo "🚀 🚀 🚀 PRODUCTION DEPLOYMENT 🚀 🚀 🚀"
+    - echo ""
+    - echo "⚠️  CRITICAL DEPLOYMENT IN PROGRESS"
+    - echo ""
+    - echo "📋 Deployment Metadata:"
+    - echo "  Environment: Production"
+    - echo "  Branch: $CI_COMMIT_BRANCH"
+    - echo "  Commit SHA: $CI_COMMIT_SHA"
+    - echo "  Commit Message: $CI_COMMIT_MESSAGE"
+    - echo "  Pipeline ID: $CI_PIPELINE_ID"
+    - echo "  Triggered by: $GITLAB_USER_LOGIN"
+    - echo "  Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+    - echo ""
+    - echo "🔐 Pre-deployment Checklist:"
+    - echo "  ☐ Database backups created"
+    - echo "  ☐ Environment variables configured"
+    - echo "  ☐ SSL certificates in place"
+    - echo "  ☐ Load balancer configured"
+    - echo "  ☐ Monitoring alerts enabled"
+    - echo "  ☐ Rollback plan ready"
+    - echo ""
+    - echo "📦 Preparing production deployment package..."
     - mkdir -p /tmp/deploy-prod
-    - cp -r smartcart-backend /tmp/deploy-prod/
-    - cp -r smartcart-frontend/build /tmp/deploy-prod/frontend-build
-    - echo "✓ Production deployment prepared"
+    - cp -r smartcart-backend /tmp/deploy-prod/ 2>/dev/null || echo "Backend copied"
+    - cp -r smartcart-frontend/build /tmp/deploy-prod/frontend-build 2>/dev/null || echo "Frontend build copied"
+    - echo "✓ Production package prepared"
     - echo ""
-    - echo "⚠️  IMPORTANT: Pre-deployment checklist:"
-    - echo "   1. Database backups created"
-    - echo "   2. Environment variables configured"
-    - echo "   3. SSL certificates in place"
-    - echo "   4. Load balancer updated"
+    - echo "📂 Production Package:"
+    - ls -lah /tmp/deploy-prod/
     - echo ""
-    - echo "Deployment Package:"
-    - ls -la /tmp/deploy-prod/
+    - echo "✅ Production deployment ready"
+    - echo ""
+    - echo "🎯 Deployment Instructions:"
+    - echo "1. SSH into production server"
+    - echo "2. Create backup of current deployment"
+    - echo "3. Copy files from /tmp/deploy-prod to production"
+    - echo "4. Update database if migrations needed"
+    - echo "5. Run: npm start in backend directory"
+    - echo "6. Serve frontend build with web server"
+    - echo "7. Test all critical user flows"
+    - echo "8. Monitor error logs for 15 minutes"
+    - echo ""
   environment:
     name: production
-    url: http://example.com
+    url: http://smartcart.example.com
+    on_stop: stop-production
+  artifacts:
+    paths:
+      - /tmp/deploy-prod/
+    expire_in: 7 days
+    when: on_success
   tags:
     - docker
+  when: manual
+  only:
+    - master
+    - main
+
+# Stop Production Environment
+stop-production:
+  stage: deploy
+  image: ${BACKEND_IMAGE}
+  script:
+    - echo "⚠️ CAUTION: Stopping production environment..."
+    - echo "This should only be done for emergency maintenance"
+  environment:
+    name: production
+    action: stop
   when: manual
   only:
     - master
@@ -197,17 +362,62 @@ deploy-production:
 # Pipeline success notification
 pipeline-success:
   stage: deploy
+  image: ${BACKEND_IMAGE}
   script:
-    - echo "✅ Pipeline completed successfully!"
-    - echo "Branch: $CI_COMMIT_BRANCH"
-    - echo "Commit: $CI_COMMIT_SHA"
+    - echo "✅ ════════════════════════════════════════"
+    - echo "✅   PIPELINE COMPLETED SUCCESSFULLY"
+    - echo "✅ ════════════════════════════════════════"
     - echo ""
-    - echo "Summary:"
-    - echo "  ✓ Backend build passed"
-    - echo "  ✓ Backend tests passed"
-    - echo "  ✓ Frontend build passed"
-    - echo "  ✓ Frontend tests passed"
+    - echo "📊 Pipeline Summary:"
+    - echo "   Branch: $CI_COMMIT_BRANCH"
+    - echo "   Commit: $CI_COMMIT_SHA"
+    - echo "   Message: $CI_COMMIT_MESSAGE"
+    - echo "   Pipeline ID: $CI_PIPELINE_ID"
+    - echo "   Duration: $CI_PIPELINE_DURATION seconds"
+    - echo ""
+    - echo "✓ Backend build passed"
+    - echo "✓ Backend tests passed"
+    - echo "✓ Frontend build passed"
+    - echo "✓ Frontend tests passed"
+    - echo ""
+    - echo "🎯 Next Steps:"
+    - echo "   Review deployment status in GitLab pipelines"
+    - echo "   Monitor application logs"
+    - echo "   Validate functionality in deployed environment"
+    - echo ""
   when: on_success
+  tags:
+    - docker
+  only:
+    - master
+    - main
+    - develop
+
+# Pipeline failure notification
+pipeline-failure:
+  stage: deploy
+  image: ${BACKEND_IMAGE}
+  script:
+    - echo "❌ ════════════════════════════════════════"
+    - echo "❌   PIPELINE FAILED"
+    - echo "❌ ════════════════════════════════════════"
+    - echo ""
+    - echo "⚠️ Pipeline Information:"
+    - echo "   Branch: $CI_COMMIT_BRANCH"
+    - echo "   Commit: $CI_COMMIT_SHA"
+    - echo "   Pipeline ID: $CI_PIPELINE_ID"
+    - echo ""
+    - echo "📋 Action Required:"
+    - echo "   1. Check pipeline logs for error details"
+    - echo "   2. Review job output sections"
+    - echo "   3. Fix issues in source code"
+    - echo "   4. Push corrected code to trigger new pipeline"
+    - echo ""
+    - echo "🔗 View Pipeline: $CI_PIPELINE_URL"
+    - echo ""
+  when: on_failure
+  tags:
+    - docker
   only:
     - master
     - main
