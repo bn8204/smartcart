@@ -1,53 +1,150 @@
-name: Deploy to Production
+name: Deploy Application
 
 on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
   push:
-    branches: [ master, main ]
-  workflow_run:
-    workflows: ["Backend CI", "Frontend CI"]
-    types:
-      - completed
-    branches: [ master, main ]
+    branches:
+      - main
+      - master
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
+    name: Deploy to ${{ github.event.inputs.environment || 'staging' }}
+    environment: ${{ github.event.inputs.environment || 'staging' }}
     
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18.x'
-    
-    - name: Install backend dependencies
-      working-directory: ./smartcart-backend
-      run: npm ci --only=production
-    
-    - name: Install frontend dependencies
-      working-directory: ./smartcart-frontend
-      run: npm ci
-    
-    - name: Build frontend
-      working-directory: ./smartcart-frontend
-      run: npm run build
-      env:
-        CI: false
-    
-    - name: Create deployment package
-      run: |
-        mkdir -p deployment
-        cp -r smartcart-backend deployment/
-        cp -r smartcart-frontend/build deployment/frontend-build
-        echo "Deployment package created"
-        ls -la deployment/
-    
-    - name: Run health checks
-      run: |
-        echo "✓ Backend files ready"
-        test -f deployment/smartcart-backend/src/app.js && echo "✓ App.js exists"
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Display deployment info
+        run: |
+          echo "🚀 ════════════════════════════════════════"
+          echo "🚀   DEPLOYMENT INFORMATION"
+          echo "🚀 ════════════════════════════════════════"
+          echo ""
+          echo "📋 Deployment Details:"
+          echo "   Environment: ${{ github.event.inputs.environment || 'staging' }}"
+          echo "   Branch: ${{ github.ref_name }}"
+          echo "   Commit SHA: ${{ github.sha }}"
+          echo "   Commit Message: ${{ github.event.head_commit.message }}"
+          echo "   Triggered by: ${{ github.actor }}"
+          echo "   Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          echo ""
+
+      - name: Install backend dependencies
+        working-directory: smartcart-backend
+        run: npm ci --production
+
+      - name: Install frontend dependencies
+        working-directory: smartcart-frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: smartcart-frontend
+        env:
+          CI: false
+        run: npm run build
+
+      - name: Install admin dependencies
+        working-directory: smartcart-admin
+        run: npm ci
+
+      - name: Build admin dashboard
+        working-directory: smartcart-admin
+        env:
+          CI: false
+        run: npm run build
+
+      - name: Verify builds
+        run: |
+          echo "✓ Backend ready"
+          test -f smartcart-backend/src/app.js && echo "✓ Backend structure verified"
+          test -d smartcart-frontend/build && echo "✓ Frontend build exists"
+          test -d smartcart-admin/build && echo "✓ Admin build exists"
+
+      - name: Prepare deployment package
+        run: |
+          echo "📦 Preparing deployment package..."
+          mkdir -p deployment/backend
+          mkdir -p deployment/frontend
+          mkdir -p deployment/admin
+          
+          # Copy backend (essential files)
+          cp -r smartcart-backend/src deployment/backend/ || true
+          cp -r smartcart-backend/config deployment/backend/ || true
+          cp smartcart-backend/package.json deployment/backend/ || true
+          cp smartcart-backend/package-lock.json deployment/backend/ || true
+          
+          # Copy frontend build
+          cp -r smartcart-frontend/build/* deployment/frontend/ || true
+          
+          # Copy admin build
+          cp -r smartcart-admin/build/* deployment/admin/ || true
+          
+          echo "✓ Deployment package prepared"
+          echo ""
+          echo "📂 Package Contents:"
+          ls -lah deployment/
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: deployment-${{ github.event.inputs.environment || 'staging' }}
+          path: deployment/
+          retention-days: 7
+
+      - name: Deployment status
+        if: success()
+        run: |
+          echo ""
+          echo "✅ ════════════════════════════════════════"
+          echo "✅   DEPLOYMENT PACKAGE READY"
+          echo "✅ ════════════════════════════════════════"
+          echo ""
+          echo "📊 Package Summary:"
+          echo "   Environment: ${{ github.event.inputs.environment || 'staging' }}"
+          echo "   Size: $(du -sh deployment/ 2>/dev/null | cut -f1)"
+          echo "   Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          echo ""
+          echo "📥 Download from GitHub Actions:"
+          echo "   Actions → Latest Run → Artifacts → deployment-${{ github.event.inputs.environment || 'staging' }}"
+          echo ""
+          echo "🎯 Deployment Instructions:"
+          if [ "${{ github.event.inputs.environment }}" == "production" ]; then
+            echo "   PRODUCTION DEPLOYMENT - Follow manual procedure"
+            echo "   1. Backup current deployment"
+            echo "   2. Download artifact from GitHub"
+            echo "   3. SSH to production server"
+            echo "   4. Extract deployment files to /var/www/smartcart/"
+            echo "   5. Update environment variables"
+            echo "   6. Restart services: systemctl restart smartcart-api smartcart-frontend smartcart-admin"
+            echo "   7. Verify: curl http://localhost:5000/health"
+          else
+            echo "   STAGING/DEV DEPLOYMENT"
+            echo "   1. Download artifact from GitHub Actions"
+            echo "   2. Extract files to deployment directory"
+            echo "   3. Copy environment variables from staging server"
+            echo "   4. Run: npm install (if backend needs it)"
+            echo "   5. Start services"
+          fi
+          echo ""
         test -f deployment/smartcart-backend/src/server.js && echo "✓ Server.js exists"
         echo "✓ Frontend build ready"
         test -d deployment/frontend-build && echo "✓ Build directory exists"

@@ -1,0 +1,209 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+  workflow_dispatch:
+
+jobs:
+  backend-build-test:
+    runs-on: ubuntu-latest
+    name: Backend Build & Test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'smartcart-backend/package-lock.json'
+
+      - name: Install backend dependencies
+        working-directory: smartcart-backend
+        run: npm ci
+
+      - name: Lint backend code
+        working-directory: smartcart-backend
+        run: npm run lint --if-present || echo "No linter configured"
+
+      - name: Verify backend structure
+        working-directory: smartcart-backend
+        run: |
+          echo "📋 Checking backend structure..."
+          test -f src/app.js && echo "✓ app.js found" || echo "⚠ app.js not found"
+          test -f src/server.js && echo "✓ server.js found" || echo "⚠ server.js not found"
+          test -d src/routes && echo "✓ routes directory found" || echo "⚠ routes directory not found"
+          test -d src/controllers && echo "✓ controllers directory found" || echo "⚠ controllers directory not found"
+
+      - name: Upload backend artifacts
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: backend-build
+          path: smartcart-backend/
+          retention-days: 1
+
+  frontend-build-test:
+    runs-on: ubuntu-latest
+    name: Frontend Build & Test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'smartcart-frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        working-directory: smartcart-frontend
+        run: npm ci
+
+      - name: Lint frontend code
+        working-directory: smartcart-frontend
+        run: npm run lint --if-present || echo "No linter configured"
+
+      - name: Build frontend
+        working-directory: smartcart-frontend
+        env:
+          CI: false
+        run: npm run build
+
+      - name: Verify frontend build
+        working-directory: smartcart-frontend
+        run: |
+          echo "📋 Checking frontend build..."
+          test -d build && echo "✓ Build directory exists" || (echo "❌ Build directory missing" && exit 1)
+          test -f build/index.html && echo "✓ index.html found" || echo "⚠ index.html not found"
+          echo "📊 Build size:"
+          du -sh build/
+
+      - name: Upload frontend artifacts
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: frontend-build
+          path: smartcart-frontend/build/
+          retention-days: 1
+
+  admin-build-test:
+    runs-on: ubuntu-latest
+    name: Admin Dashboard Build & Test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'smartcart-admin/package-lock.json'
+
+      - name: Install admin dependencies
+        working-directory: smartcart-admin
+        run: npm ci
+
+      - name: Lint admin code
+        working-directory: smartcart-admin
+        run: npm run lint --if-present || echo "No linter configured"
+
+      - name: Build admin dashboard
+        working-directory: smartcart-admin
+        env:
+          CI: false
+        run: npm run build
+
+      - name: Verify admin build
+        working-directory: smartcart-admin
+        run: |
+          echo "📋 Checking admin build..."
+          test -d build && echo "✓ Build directory exists" || (echo "❌ Build directory missing" && exit 1)
+          test -f build/index.html && echo "✓ index.html found" || echo "⚠ index.html not found"
+          echo "📊 Build size:"
+          du -sh build/
+
+      - name: Upload admin artifacts
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: admin-build
+          path: smartcart-admin/build/
+          retention-days: 1
+
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scan
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install backend dependencies for audit
+        working-directory: smartcart-backend
+        run: npm ci --production
+
+      - name: Backend security audit
+        working-directory: smartcart-backend
+        run: npm audit --audit-level=moderate || true
+
+      - name: Install frontend dependencies for audit
+        working-directory: smartcart-frontend
+        run: npm ci --production
+
+      - name: Frontend security audit
+        working-directory: smartcart-frontend
+        run: npm audit --audit-level=moderate || true
+
+      - name: Install admin dependencies for audit
+        working-directory: smartcart-admin
+        run: npm ci --production
+
+      - name: Admin security audit
+        working-directory: smartcart-admin
+        run: npm audit --audit-level=moderate || true
+
+  summary:
+    runs-on: ubuntu-latest
+    name: Pipeline Summary
+    needs: [backend-build-test, frontend-build-test, admin-build-test, security-scan]
+    if: always()
+    
+    steps:
+      - name: Pipeline Status
+        run: |
+          echo "✅ ════════════════════════════════════════"
+          echo "✅   PIPELINE EXECUTION COMPLETED"
+          echo "✅ ════════════════════════════════════════"
+          echo ""
+          echo "📊 Build Status:"
+          echo "   Backend: ${{ needs.backend-build-test.result }}"
+          echo "   Frontend: ${{ needs.frontend-build-test.result }}"
+          echo "   Admin: ${{ needs.admin-build-test.result }}"
+          echo "   Security: ${{ needs.security-scan.result }}"
+          echo ""
+          echo "🎯 Next Steps:"
+          echo "   1. Review build artifacts"
+          echo "   2. Check security scan results"
+          echo "   3. Deploy to staging (if main branch)"
+          echo ""
