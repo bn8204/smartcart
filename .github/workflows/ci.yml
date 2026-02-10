@@ -47,7 +47,7 @@ jobs:
           test -d src/controllers && echo "✓ controllers directory found" || echo "⚠ controllers directory not found"
 
       - name: Upload backend artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: success()
         with:
           name: backend-build
@@ -93,7 +93,7 @@ jobs:
           du -sh build/
 
       - name: Upload frontend artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: success()
         with:
           name: frontend-build
