@@ -49,11 +49,11 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: smartcart-backend
-        run: npm ci --production
+        run: npm ci --prefer-offline --legacy-peer-deps
 
       - name: Install frontend dependencies
         working-directory: smartcart-frontend
-        run: npm ci
+        run: npm ci --prefer-offline --legacy-peer-deps
 
       - name: Build frontend
         working-directory: smartcart-frontend
@@ -63,7 +63,7 @@ jobs:
 
       - name: Install admin dependencies
         working-directory: smartcart-admin
-        run: npm ci
+        run: npm ci --prefer-offline --legacy-peer-deps
 
       - name: Build admin dashboard
         working-directory: smartcart-admin
