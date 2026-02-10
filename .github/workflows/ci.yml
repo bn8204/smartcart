@@ -26,12 +26,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: smartcart-backend/package-lock.json
 
       - name: Install backend dependencies
         working-directory: smartcart-backend
-        run: npm ci
+        run: npm ci --prefer-offline
 
       - name: Lint backend code
         working-directory: smartcart-backend
@@ -66,12 +64,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: smartcart-frontend/package-lock.json
 
       - name: Install frontend dependencies
         working-directory: smartcart-frontend
-        run: npm ci
+        run: npm ci --prefer-offline
 
       - name: Lint frontend code
         working-directory: smartcart-frontend
@@ -112,12 +108,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: smartcart-admin/package-lock.json
 
       - name: Install admin dependencies
         working-directory: smartcart-admin
-        run: npm ci
+        run: npm ci --prefer-offline
 
       - name: Lint admin code
         working-directory: smartcart-admin
