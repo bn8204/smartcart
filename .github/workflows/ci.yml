@@ -155,7 +155,7 @@ jobs:
 
       - name: Install backend dependencies for audit
         working-directory: smartcart-backend
-        run: npm ci --production
+        run: npm ci --prefer-offline --legacy-peer-deps
 
       - name: Backend security audit
         working-directory: smartcart-backend
@@ -163,7 +163,7 @@ jobs:
 
       - name: Install frontend dependencies for audit
         working-directory: smartcart-frontend
-        run: npm ci --production
+        run: npm ci --prefer-offline --legacy-peer-deps
 
       - name: Frontend security audit
         working-directory: smartcart-frontend
@@ -171,7 +171,7 @@ jobs:
 
       - name: Install admin dependencies for audit
         working-directory: smartcart-admin
-        run: npm ci --production
+        run: npm ci --prefer-offline --legacy-peer-deps
 
       - name: Admin security audit
         working-directory: smartcart-admin
