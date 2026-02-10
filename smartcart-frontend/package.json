@@ -13,7 +13,8 @@
     "react-dom": "^18.2.0",
     "axios": "^1.6.0",
     "react-router-dom": "^6.8.0",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "ajv": "^8.0.0"
   },
   "devDependencies": {
     "@testing-library/react": "^13.4.0",
