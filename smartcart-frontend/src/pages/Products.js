@@ -14,10 +14,15 @@ function Products({ onAddToCart }) {
     try {
       setLoading(true);
       const response = await productService.getAllProducts();
-      setProducts(response.data || []);
+      // Handle both old format (array) and new format (object with data property)
+      const productsData = Array.isArray(response.data) ? response.data : (response.data?.data || []);
+      setProducts(productsData);
+      if (productsData.length === 0) {
+        setError('No products available');
+      }
     } catch (err) {
-      setError('Failed to load products');
-      console.error(err);
+      console.error('Error fetching products:', err);
+      setError('Failed to load products: ' + (err.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }

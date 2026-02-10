@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { paymentService } from '../services/api';
 
 function Payment({ orderId, onPaymentSuccess, onPaymentCancel }) {
@@ -13,6 +13,73 @@ function Payment({ orderId, onPaymentSuccess, onPaymentCancel }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
+  
+  // New state for interrupt handling
+  const [sessionId, setSessionId] = useState(null);
+  const [isInterrupted, setIsInterrupted] = useState(false);
+  const [canResume, setCanResume] = useState(false);
+  const [attemptCount, setAttemptCount] = useState(0);
+  const [maxAttempts, setMaxAttempts] = useState(3);
+  const abortControllerRef = useRef(null);
+  const timeoutRef = useRef(null);
+  const unloadListenerRef = useRef(false);
+
+  // Initialize payment session and setup event listeners
+  useEffect(() => {
+    const initializeSession = async () => {
+      try {
+        console.log('=== CREATING PAYMENT SESSION ===');
+        console.log('Order ID:', orderId);
+        const response = await paymentService.createPaymentSession(orderId);
+        console.log('Session response:', response);
+        console.log('Session ID from response.data:', response.data?.sessionId);
+        setSessionId(response.data?.sessionId);
+        setMaxAttempts(response.data?.maxAttempts || 3);
+        console.log('Session ID set to state:', response.data?.sessionId);
+      } catch (error) {
+        console.error('Failed to initialize payment session:', error);
+        setMessage(`Session Error: ${error.message || 'Failed to create payment session'}`);
+        setMessageType('error');
+      }
+    };
+
+    initializeSession();
+
+    // Setup beforeunload listener to warn user
+    const handleBeforeUnload = (e) => {
+      if (loading && sessionId) {
+        e.preventDefault();
+        e.returnValue = 'Payment is in progress. Are you sure you want to leave?';
+        return 'Payment is in progress. Are you sure you want to leave?';
+      }
+    };
+
+    if (loading && sessionId) {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      unloadListenerRef.current = true;
+    }
+
+    return () => {
+      if (unloadListenerRef.current) {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      }
+    };
+  }, [orderId, sessionId, loading]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (unloadListenerRef.current) {
+        window.removeEventListener('beforeunload', () => {});
+      }
+    };
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -54,23 +121,115 @@ function Payment({ orderId, onPaymentSuccess, onPaymentCancel }) {
     return true;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const initiatePaymentWithTimeout = (paymentRequest) => {
+    return new Promise((resolve, reject) => {
+      // Create abort controller for cancellation
+      abortControllerRef.current = new AbortController();
 
+      // Set timeout for payment processing
+      timeoutRef.current = setTimeout(() => {
+        abortControllerRef.current.abort();
+        handlePaymentTimeout();
+        reject(new Error('Payment timeout exceeded'));
+      }, 30000); // 30 second timeout
+
+      // Simulate payment processing
+      paymentService
+        .confirmPayment(paymentRequest)
+        .then((response) => {
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+          }
+          resolve(response);
+        })
+        .catch((error) => {
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+          }
+          reject(error);
+        });
+    });
+  };
+
+  const handlePaymentTimeout = async () => {
+    if (!sessionId) return;
+
+    setIsInterrupted(true);
+    setCanResume(attemptCount < maxAttempts);
+    setMessage(
+      `⏱️ Payment timeout (attempt ${attemptCount + 1}/${maxAttempts}). You can retry or cancel.`
+    );
+    setMessageType('warning');
+    setLoading(false);
+  };
+
+  const handlePaymentError = async (error) => {
+    if (!sessionId) return;
+
+    const isNetworkError = !error.response || error.code === 'ECONNABORTED';
+
+    if (isNetworkError) {
+      setIsInterrupted(true);
+      setCanResume(attemptCount < maxAttempts);
+      setMessage(
+        `🌐 Network error detected (attempt ${attemptCount + 1}/${maxAttempts}). Would you like to retry?`
+      );
+      setMessageType('warning');
+    }
+  };
+
+  const handlePaymentInterruption = async (reason) => {
+    if (!sessionId) return;
+
+    try {
+      await paymentService.handlePaymentInterruption(sessionId, reason);
+      setIsInterrupted(true);
+      setCanResume(attemptCount < maxAttempts);
+      setMessage(`Payment interrupted: ${reason}. You can resume or cancel.`);
+      setMessageType('warning');
+    } catch (error) {
+      console.error('Error handling interruption:', error);
+    }
+  };
+
+  const resumePayment = async () => {
+    if (!sessionId || !canResume) return;
+
+    try {
+      setLoading(true);
+      setMessage('Resuming payment...');
+      setMessageType('info');
+
+      // Resume the payment session
+      await paymentService.resumePaymentSession(sessionId);
+
+      setAttemptCount((prev) => prev + 1);
+      setIsInterrupted(false);
+
+      // Retry the payment
+      await retryPayment();
+    } catch (error) {
+      setMessage(
+        `❌ Resume failed: ${error.response?.data?.message || error.message}`
+      );
+      setMessageType('error');
+      setLoading(false);
+    }
+  };
+
+  const retryPayment = async () => {
     if (!validatePaymentData()) {
       return;
     }
 
     try {
-      setLoading(true);
-      setMessage('Processing payment...');
-      setMessageType('info');
-
       const paymentData = {
         orderId: orderId,
         paymentMethod: paymentMethod,
         amount: formData.amount,
-        status: 'PENDING_VERIFICATION'
+        status: 'PENDING_VERIFICATION',
+        sessionId: sessionId,
+        retryAttempt: attemptCount + 1,
       };
 
       // Add payment method specific details
@@ -83,22 +242,73 @@ function Payment({ orderId, onPaymentSuccess, onPaymentCancel }) {
         paymentData.notes = 'Cash on delivery - pending verification';
       }
 
-      // Create payment request
-      const response = await paymentService.confirmPayment(paymentData);
+      // Process payment with timeout protection
+      const response = await initiatePaymentWithTimeout(paymentData);
+
+      // Complete payment in session
+      await paymentService.completePaymentSession(sessionId, response);
 
       setMessage('✅ Payment request submitted! Waiting for verification...');
       setMessageType('success');
+      setIsInterrupted(false);
 
       setTimeout(() => {
         onPaymentSuccess();
       }, 2000);
     } catch (error) {
-      setMessage('❌ Payment failed: ' + (error.response?.data?.message || error.message));
-      setMessageType('error');
+      // Handle timeout specifically
+      if (error.message === 'Payment timeout exceeded') {
+        return; // Already handled by timeout handler
+      }
+
+      await handlePaymentError(error);
       console.error(error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAbortPayment = async () => {
+    console.log('=== ABORT PAYMENT CLICKED ===');
+    console.log('Session ID:', sessionId);
+    
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    if (sessionId) {
+      try {
+        console.log('Calling cancelPaymentSession with sessionId:', sessionId);
+        const response = await paymentService.cancelPaymentSession(sessionId, 'User aborted');
+        console.log('Cancel response:', response);
+      } catch (error) {
+        console.error('Error cancelling session:', error);
+        setMessage(`Error: ${error.message || 'Failed to cancel payment'}`);
+        setMessageType('error');
+        setLoading(false);
+        return;
+      }
+    } else {
+      console.warn('No sessionId available');
+    }
+
+    setLoading(false);
+    setIsInterrupted(false);
+    setMessage('Payment cancelled successfully');
+    setMessageType('info');
+
+    setTimeout(() => {
+      onPaymentCancel();
+    }, 1000);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    retryPayment();
   };
 
   return (
@@ -237,31 +447,73 @@ function Payment({ orderId, onPaymentSuccess, onPaymentCancel }) {
             </div>
           )}
 
+          {/* Attempt Counter */}
+          {attemptCount > 0 && (
+            <div style={{
+              backgroundColor: '#e8f4f8',
+              padding: '0.75rem',
+              borderRadius: '4px',
+              marginBottom: '1rem',
+              color: '#0c5460',
+              fontSize: '0.9rem'
+            }}>
+              📊 Attempt {attemptCount} of {maxAttempts}
+            </div>
+          )}
+
           {/* Form Buttons */}
-          <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
-            <button 
-              type="submit" 
-              className="btn"
-              disabled={loading}
-              style={{ flex: 1 }}
-            >
-              {loading ? 'Processing...' : 'Submit Payment'}
-            </button>
-            <button 
-              type="button"
-              className="btn btn-danger"
-              onClick={onPaymentCancel}
-              disabled={loading}
-              style={{ flex: 1 }}
-            >
-              Cancel
-            </button>
+          <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', flexWrap: 'wrap' }}>
+            {!isInterrupted ? (
+              <>
+                <button 
+                  type="submit" 
+                  className="btn"
+                  disabled={loading}
+                  style={{ flex: 1, minWidth: '120px' }}
+                >
+                  {loading ? 'Processing...' : 'Submit Payment'}
+                </button>
+                <button 
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleAbortPayment}
+                  disabled={loading}
+                  style={{ flex: 1, minWidth: '120px' }}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                {canResume && (
+                  <button 
+                    type="button"
+                    className="btn"
+                    onClick={resumePayment}
+                    disabled={loading}
+                    style={{ flex: 1, minWidth: '120px' }}
+                  >
+                    {loading ? 'Resuming...' : '🔄 Retry Payment'}
+                  </button>
+                )}
+                <button 
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleAbortPayment}
+                  disabled={loading}
+                  style={{ flex: 1, minWidth: '120px' }}
+                >
+                  Cancel Order
+                </button>
+              </>
+            )}
           </div>
         </form>
 
         <p style={{ fontSize: '0.8rem', color: '#999', marginTop: '1rem', textAlign: 'center' }}>
           * This is a demo payment. All data is for testing purposes only.
         </p>
+        {sessionId && <div style={{ fontSize: '0.7rem', marginTop: '0.5rem', textAlign: 'center' }}>Session: {sessionId}</div>}
       </div>
     </div>
   );

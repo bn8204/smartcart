@@ -9,11 +9,11 @@ exports.confirmOrder = async (orderId) => {
   try {
     console.log('Processing payment for order:', orderId);
     
-    // Keep order as PENDING - admin will verify and approve
-    const updateResult = await orderRepo.updateStatus(orderId, 'PENDING');
-    console.log('Order status updated to PENDING:', updateResult);
+    // Update order status to PAID after successful payment
+    const updateResult = await orderRepo.updateStatus(orderId, 'PAID');
+    console.log('Order status updated to PAID:', updateResult);
     
-    return { success: true, orderId, message: 'Payment submitted for verification' };
+    return { success: true, orderId, message: 'Payment confirmed and order marked as PAID' };
   } catch (error) {
     console.error('Payment confirmation error:', error);
     throw new Error('Failed to process payment: ' + error.message);

@@ -1,0 +1,72 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ master, main ]
+  workflow_run:
+    workflows: ["Backend CI", "Frontend CI"]
+    types:
+      - completed
+    branches: [ master, main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18.x'
+    
+    - name: Install backend dependencies
+      working-directory: ./smartcart-backend
+      run: npm ci --only=production
+    
+    - name: Install frontend dependencies
+      working-directory: ./smartcart-frontend
+      run: npm ci
+    
+    - name: Build frontend
+      working-directory: ./smartcart-frontend
+      run: npm run build
+      env:
+        CI: false
+    
+    - name: Create deployment package
+      run: |
+        mkdir -p deployment
+        cp -r smartcart-backend deployment/
+        cp -r smartcart-frontend/build deployment/frontend-build
+        echo "Deployment package created"
+        ls -la deployment/
+    
+    - name: Run health checks
+      run: |
+        echo "✓ Backend files ready"
+        test -f deployment/smartcart-backend/src/app.js && echo "✓ App.js exists"
+        test -f deployment/smartcart-backend/src/server.js && echo "✓ Server.js exists"
+        echo "✓ Frontend build ready"
+        test -d deployment/frontend-build && echo "✓ Build directory exists"
+    
+    - name: Notify deployment
+      run: |
+        echo "✓ Deployment package ready"
+        echo "Branch: ${{ github.ref }}"
+        echo "Commit: ${{ github.sha }}"
+        echo ""
+        echo "To deploy:"
+        echo "1. Download the artifact"
+        echo "2. Set environment variables (DATABASE_URL, API_KEYS, etc.)"
+        echo "3. Run: npm start in smartcart-backend directory"
+        echo "4. Serve smartcart-frontend/build with your web server"
+    
+    - name: Upload deployment artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-package
+        path: deployment/
+        retention-days: 30

@@ -14,7 +14,9 @@ function Home({ onAddToCart }) {
     try {
       setLoading(true);
       const response = await productService.getAllProducts();
-      setProducts(response.data || []);
+      // Backend returns {success: true, data: [...], message: "..."}
+      const productsData = response.data?.data || response.data || [];
+      setProducts(Array.isArray(productsData) ? productsData : []);
     } catch (err) {
       setError('Failed to load products');
       console.error(err);
@@ -24,7 +26,7 @@ function Home({ onAddToCart }) {
   };
 
   // Group products by category
-  const groupedProducts = products.reduce((acc, product) => {
+  const groupedProducts = (Array.isArray(products) ? products : []).reduce((acc, product) => {
     const category = product.category || 'Other';
     if (!acc[category]) {
       acc[category] = [];
