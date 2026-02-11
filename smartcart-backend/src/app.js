@@ -15,6 +15,24 @@ app.use((req, res, next) => {
   next();
 });
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: '🚀 SmartCart Backend API',
+    version: '1.0.0',
+    status: 'Running',
+    endpoints: {
+      health: '/health',
+      users: '/api/users',
+      products: '/api/products',
+      orders: '/api/orders',
+      payments: '/api/payments',
+      ratings: '/api/ratings'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Test route
 app.get('/health', (req, res) => {
   res.json({ status: 'Backend is running' });
