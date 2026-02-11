@@ -1,11 +1,11 @@
 const app = require('./app');
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-console.log('Server starting...');
+console.log(`Starting server on port ${PORT}...`);
 
-const server = app.listen(PORT, () => {
-  console.log(`SmartCart backend running on port ${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✓ SmartCart backend running on port ${PORT}`);
 });
 
 // Error handling

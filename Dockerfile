@@ -5,9 +5,6 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
-
 # Copy root level files
 COPY package*.json ./
 COPY Procfile ./
@@ -31,14 +28,7 @@ RUN chown -R nodejs:nodejs /app
 USER nodejs
 
 # Expose port (Render will assign PORT env variable)
-EXPOSE 10000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 10000), (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
-
-# Use dumb-init to run node properly
-ENTRYPOINT ["/sbin/dumb-init", "--"]
+EXPOSE 3000
 
 # Start the application
 CMD ["node", "src/server.js"]
