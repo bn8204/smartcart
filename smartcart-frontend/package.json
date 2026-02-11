@@ -2,11 +2,14 @@
   "name": "smartcart-frontend",
   "version": "1.0.0",
   "description": "SmartCart - E-commerce frontend with React",
+  "homepage": "https://bn8204.github.io/smartcart-frontend",
   "main": "index.js",
   "scripts": {
     "start": "cross-env PORT=3003 react-scripts start",
     "build": "react-scripts build",
-    "dev": "cross-env PORT=3003 react-scripts start"
+    "dev": "cross-env PORT=3003 react-scripts start",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "dependencies": {
     "react": "^18.2.0",
