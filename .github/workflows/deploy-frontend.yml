@@ -1,0 +1,73 @@
+name: Deploy Frontend to GitHub Pages
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - 'smartcart-frontend/**'
+      - 'smartcart-admin/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install frontend dependencies
+        working-directory: smartcart-frontend
+        run: npm install --legacy-peer-deps
+
+      - name: Build frontend
+        working-directory: smartcart-frontend
+        env:
+          CI: false
+          REACT_APP_API_URL: https://smartcart-ks73.onrender.com
+        run: npm run build
+
+      - name: Deploy frontend to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./smartcart-frontend/build
+          destination_dir: smartcart-frontend
+
+  deploy-admin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install admin dependencies
+        working-directory: smartcart-admin
+        run: npm install --legacy-peer-deps
+
+      - name: Build admin dashboard
+        working-directory: smartcart-admin
+        env:
+          CI: false
+          REACT_APP_API_URL: https://smartcart-ks73.onrender.com
+        run: npm run build
+
+      - name: Deploy admin to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./smartcart-admin/build
+          destination_dir: smartcart-admin
