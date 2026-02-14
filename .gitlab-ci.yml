@@ -40,7 +40,7 @@ backend-build:
     - npm config set cache ${NPM_CACHE_DIR}
   script:
     - echo "📦 Building Backend..."
-    - npm ci --cache=${NPM_CACHE_DIR} --prefer-offline
+    - npm ci --cache=${NPM_CACHE_DIR} --prefer-offline --legacy-peer-deps
     - echo "✓ Dependencies installed successfully"
     - echo "Backend build successful"
   artifacts:
@@ -107,7 +107,7 @@ frontend-build:
     - npm config set cache ${NPM_CACHE_DIR}
   script:
     - echo "🎨 Building Frontend..."
-    - npm ci --cache=${NPM_CACHE_DIR} --prefer-offline
+    - npm ci --cache=${NPM_CACHE_DIR} --prefer-offline --legacy-peer-deps
     - echo "✓ Dependencies installed"
     - echo "Building production bundle..."
     - CI=false npm run build
@@ -179,7 +179,7 @@ admin-build:
     - npm config set cache ${NPM_CACHE_DIR}
   script:
     - echo "📊 Building Admin Dashboard..."
-    - npm ci --cache=${NPM_CACHE_DIR} --prefer-offline
+    - npm ci --cache=${NPM_CACHE_DIR} --prefer-offline --legacy-peer-deps
     - echo "✓ Admin dependencies installed"
     - echo "Building admin production bundle..."
     - CI=false npm run build
